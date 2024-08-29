@@ -21,53 +21,19 @@ def send_message(client_socket):
             # 这里可以添加重新连接或记录错误信息的代码
 
 def receive_messages(client_socket):
-    while True:
-        try:
-            data = client_socket.recv(1024)
-            if not data:
-                break
-            hex_data = ' '.join([f'{x:02x}' for x in data])
-            print(f"收到消息: {hex_data}")
-            # 解包CAN消息
-            data_length, frame_id, data_bytes1, data_bytes2 = struct.unpack('>BI4s4s', data)
-
-            # 解包帧ID
-            frame_id = hex(frame_id)
-
-            # 解包数据
-            data = struct.unpack('<I', data_bytes1)[0]
-
-            # 打印解包后的数据
-            # print("数据长度:", data_length)
-            # print("帧ID:", frame_id)
-            print("能耗值:", data)
-        except ConnectionAbortedError:
-            print("连接被中止，尝试重新连接或记录错误信息")
-            # 这里可以添加重新连接或记录错误信息的代码
-        except OSError as e:
-            if e.errno == 10038:
-                print("客户端连接已关闭")
-                break
-
-def receive_messages_from_client():
-    # Modbus TCP服务器信息
-    MODBUS_SERVER_IP = '192.168.15.210'  # Modbus服务器的IP
-    MODBUS_SERVER_PORT = 502          # 通常Modbus TCP使用502端口
-
+    client = ModbusTcpClient('192.168.50.198', port=504)
     # Modbus保持寄存器地址
     HOLDING_REGISTER_VOLTAGE_ADDRESS1 = 40007 - 40001  # 从0开始索引
     HOLDING_REGISTER_VOLTAGE_ADDRESS2 = 40008 - 40001  # 从0开始索引
-
-    # 创建Modbus TCP客户端
-    client = ModbusTcpClient(MODBUS_SERVER_IP, port=MODBUS_SERVER_PORT)
+    client.connect()
+    unit_id = 1    # 单元标识符，通常为1
     while True:
-        # 尝试连接到Modbus服务器
-        if client.connect():
+        try:
             # 读取保持寄存器中的数据
             response1 = client.read_holding_registers(HOLDING_REGISTER_VOLTAGE_ADDRESS1, count=1, unit=1)
             response2 = client.read_holding_registers(HOLDING_REGISTER_VOLTAGE_ADDRESS2, count=1, unit=1)
             if response1.isError():
-                print(f"读取寄存器地址{40007}的电压值失败: {response1}")
+                print(f"读取寄存器地址{40007}的值失败: {response1}")
             else:
                 # 获取寄存器中的原始数值
                 value1 = response1.registers[0]
@@ -87,9 +53,81 @@ def receive_messages_from_client():
                 # print(can_message)
                 global pending_message
                 pending_message = can_message
-        else:
-            print(f"无法连接到Modbus服务器 {MODBUS_SERVER_IP}:{MODBUS_SERVER_PORT}")
-        time.sleep(0.1)
+
+            data = client_socket.recv(1024)
+            if not data:
+                break
+            hex_data = ' '.join([f'{x:02x}' for x in data])
+            print(f"收到消息: {hex_data}")
+            # 解包CAN消息
+            data_length, frame_id, data_bytes1, data_bytes2 = struct.unpack('>BI4s4s', data)
+
+            # 解包帧ID
+            frame_id = hex(frame_id)
+
+            # 解包数据
+            data = struct.unpack('<I', data_bytes1)[0]
+
+            # 打印解包后的数据
+            # print("数据长度:", data_length)
+            # print("帧ID:", frame_id)
+            print("能耗值:", data)
+            address = 40010  # 寄存器地址
+            value = data   # 要写入的值
+            result = client.write_register(address, value, unit=unit_id)
+            if not result.isError():
+                print("写入成功")
+            else:
+                print("写入失败", result)
+        except ConnectionAbortedError:
+            print("连接被中止，尝试重新连接或记录错误信息")
+            # 这里可以添加重新连接或记录错误信息的代码
+        except OSError as e:
+            if e.errno == 10038:
+                print("客户端连接已关闭")
+                break
+
+def receive_messages_from_client():
+    # Modbus TCP服务器信息
+    MODBUS_SERVER_IP = '192.168.15.210'  # Modbus服务器的IP
+    MODBUS_SERVER_PORT = 502          # 通常Modbus TCP使用502端口
+
+    # Modbus保持寄存器地址
+    HOLDING_REGISTER_VOLTAGE_ADDRESS1 = 40007 - 40001  # 从0开始索引
+    HOLDING_REGISTER_VOLTAGE_ADDRESS2 = 40008 - 40001  # 从0开始索引
+
+    # 创建Modbus TCP客户端
+    client = ModbusTcpClient(MODBUS_SERVER_IP, port=MODBUS_SERVER_PORT)
+    # while True:
+    #     # 尝试连接到Modbus服务器
+    #     if client.connect():
+    #         # 读取保持寄存器中的数据
+    #         response1 = client.read_holding_registers(HOLDING_REGISTER_VOLTAGE_ADDRESS1, count=1, unit=1)
+    #         response2 = client.read_holding_registers(HOLDING_REGISTER_VOLTAGE_ADDRESS2, count=1, unit=1)
+    #         if response1.isError():
+    #             print(f"读取寄存器地址{40007}的电压值失败: {response1}")
+    #         else:
+    #             # 获取寄存器中的原始数值
+    #             value1 = response1.registers[0]
+    #             # print(f"value1: {value1}")
+    #             value2 = response2.registers[0]
+    #             # 将数据打包为CAN数据帧格式
+    #             # 数据长度为8字节
+    #             data_length = 4
+    #             # 帧ID为0x01
+    #             frame_id = 0x01
+    #             # 将数据转换为字节表示
+    #             data_bytes1 = struct.pack('<I', value1)
+    #             # print(f"value1: {data_bytes1}")
+    #             data_bytes2 = struct.pack('<I', value2)
+    #             # 打包CAN消息
+    #             can_message = struct.pack('>BI4s4s', data_length, frame_id, data_bytes1, data_bytes2)
+    #             # print(can_message)
+    #             global pending_message
+    #             pending_message = can_message
+    #     else:
+    #         print(f"无法连接到Modbus服务器 {MODBUS_SERVER_IP}:{MODBUS_SERVER_PORT}")
+    #     time.sleep(0.1)
 
 
 def receive_commands():
